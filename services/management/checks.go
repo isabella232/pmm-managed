@@ -18,10 +18,13 @@ package management
 
 import (
 	"context"
+	"strings"
 
+	"github.com/percona-platform/saas/pkg/check"
 	"github.com/percona/pmm/api/managementpb"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.starlark.net/starlark"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -96,7 +99,8 @@ func (s *ChecksAPIService) ListSecurityChecks() (*managementpb.ListSecurityCheck
 	res := make([]*managementpb.SecurityCheck, 0, len(checks))
 	for _, c := range checks {
 		_, disabled := m[c.Name]
-		res = append(res, &managementpb.SecurityCheck{Name: c.Name, Disabled: disabled})
+		desc := s.getCheckDescription(c)
+		res = append(res, &managementpb.SecurityCheck{Name: c.Name, Disabled: disabled, Description: desc})
 	}
 
 	return &managementpb.ListSecurityChecksResponse{Checks: res}, nil
@@ -130,4 +134,29 @@ func (s *ChecksAPIService) ChangeSecurityChecks(req *managementpb.ChangeSecurity
 	}
 
 	return &managementpb.ChangeSecurityChecksResponse{}, nil
+}
+
+// parses the check script and returns the docstring for the `check_context` function.
+func (s *ChecksAPIService) getCheckDescription(check check.Check) string {
+	// TODO there is similar code in checked service
+	// move this to a common package if possible.
+	var thread starlark.Thread
+	globals, err := starlark.ExecFile(&thread, "", check.Script, nil)
+	if err != nil {
+		s.l.Warnf("%s: failed to get check description, %s", check.Name, err)
+		return ""
+	}
+
+	fun, ok := globals["check_context"].(*starlark.Function)
+	if !ok {
+		s.l.Warnf("%s: no `check_context` function found", check.Name)
+		return ""
+	}
+	doc := strings.TrimSpace(fun.Doc())
+	if doc == "" {
+		s.l.Warnf("%s: `check_context` function should have docstring", check.Name)
+		return ""
+	}
+
+	return doc
 }

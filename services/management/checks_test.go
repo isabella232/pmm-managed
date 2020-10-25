@@ -18,6 +18,7 @@ package management
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/percona-platform/saas/pkg/check"
@@ -111,11 +112,38 @@ func TestGetSecurityCheckResults(t *testing.T) {
 }
 
 func TestListSecurityChecks(t *testing.T) {
+	scriptWithDesc := strings.TrimSpace(`
+	def check_context(rows, context):
+		"""
+		This check returns and empty list.
+		"""
+	
+		return []
+	`)
+
+	scriptWithoutDesc := strings.TrimSpace(`
+	def check_context(rows, context):
+		
+		return []
+	`)
+
+	scriptWithInvalidFunction := strings.TrimSpace(`
+	def run(rows, context):
+		
+		return []
+	`)
+
+	invalidScript := "invalid script"
 	t.Run("normal", func(t *testing.T) {
 		var checksService mockChecksService
 		checksService.On("GetDisabledChecks", mock.Anything).Return([]string{"two"}, nil)
 		checksService.On("GetAllChecks", mock.Anything).
-			Return([]check.Check{{Name: "one"}, {Name: "two"}, {Name: "three"}})
+			Return([]check.Check{
+				{Name: "one", Script: scriptWithDesc},
+				{Name: "two", Script: scriptWithoutDesc},
+				{Name: "three", Script: scriptWithInvalidFunction},
+				{Name: "four", Script: invalidScript},
+			})
 
 		s := NewChecksAPIService(&checksService)
 
@@ -125,9 +153,10 @@ func TestListSecurityChecks(t *testing.T) {
 
 		assert.ElementsMatch(t, resp.Checks,
 			[]*managementpb.SecurityCheck{
-				{Name: "one", Disabled: false},
-				{Name: "two", Disabled: true},
-				{Name: "three", Disabled: false},
+				{Name: "one", Disabled: false, Description: "This check returns and empty list."},
+				{Name: "two", Disabled: true, Description: ""},
+				{Name: "three", Disabled: false, Description: ""},
+				{Name: "four", Disabled: false, Description: ""},
 			},
 		)
 	})
