@@ -138,8 +138,8 @@ func (s *ChecksAPIService) ChangeSecurityChecks(req *managementpb.ChangeSecurity
 
 // parses the check script and returns the docstring for the `check_context` function.
 func (s *ChecksAPIService) getCheckDescription(check check.Check) string {
-	// TODO there is similar code in checked service
-	// move this to a common package if possible.
+	// TODO There is similar code in check service; move this to a common package if possible.
+	// https://jira.percona.com/browse/SAAS-429
 	var thread starlark.Thread
 	globals, err := starlark.ExecFile(&thread, "", check.Script, nil)
 	if err != nil {
