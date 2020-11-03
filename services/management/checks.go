@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/percona-platform/saas/pkg/check"
+	saasStarlark "github.com/percona-platform/saas/pkg/starlark"
 	"github.com/percona/pmm/api/managementpb"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/percona/pmm-managed/services"
+	"github.com/percona/pmm-managed/services/checks"
 )
 
 // ChecksAPIService represents security checks service API.
@@ -140,8 +142,15 @@ func (s *ChecksAPIService) ChangeSecurityChecks(req *managementpb.ChangeSecurity
 func (s *ChecksAPIService) getCheckDescription(check check.Check) string {
 	// TODO There is similar code in check service; move this to a common package if possible.
 	// https://jira.percona.com/browse/SAAS-429
+	funcs, err := checks.GetFuncsForVersion(1)
+	predeclared := make(starlark.StringDict, len(funcs))
+	for n, f := range funcs {
+		predeclared[n] = starlark.NewBuiltin(n, saasStarlark.MakeFunc(f))
+	}
+	predeclared.Freeze()
+
 	var thread starlark.Thread
-	globals, err := starlark.ExecFile(&thread, "", check.Script, nil)
+	globals, err := starlark.ExecFile(&thread, "", check.Script, predeclared)
 	if err != nil {
 		s.l.Warnf("%s: failed to get check description, %s", check.Name, err)
 		return ""
