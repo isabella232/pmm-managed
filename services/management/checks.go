@@ -143,6 +143,10 @@ func (s *ChecksAPIService) getCheckDescription(check check.Check) string {
 	// TODO There is similar code in check service; move this to a common package if possible.
 	// https://jira.percona.com/browse/SAAS-429
 	funcs, err := checks.GetFuncsForVersion(1)
+	if err != nil {
+		s.l.Warnf("%s: failed to get check description, %s", check.Name, err)
+		return ""
+	}
 	predeclared := make(starlark.StringDict, len(funcs))
 	for n, f := range funcs {
 		predeclared[n] = starlark.NewBuiltin(n, saasStarlark.MakeFunc(f))
